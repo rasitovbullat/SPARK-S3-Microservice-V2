@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -13,6 +15,31 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
+
+// detectContentType determines the MIME type based on file extension.
+func detectContentType(key string) string {
+	ext := strings.ToLower(filepath.Ext(key))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	case ".webp":
+		return "image/webp"
+	case ".svg":
+		return "image/svg+xml"
+	case ".webm":
+		return "video/webm"
+	case ".mp4":
+		return "video/mp4"
+	case ".pdf":
+		return "application/pdf"
+	default:
+		return "application/octet-stream"
+	}
+}
 
 // PresignRepository defines the interface for S3 presigned URL operations.
 type PresignRepository interface {
@@ -105,6 +132,7 @@ func (r *S3Repository) GeneratePresignedUploadURL(
 }
 
 // GeneratePresignedDownloadURL creates a presigned URL for downloading an object.
+// The URL includes ResponseContentType header to ensure correct MIME type.
 func (r *S3Repository) GeneratePresignedDownloadURL(
 	ctx context.Context,
 	key string,
@@ -117,8 +145,9 @@ func (r *S3Repository) GeneratePresignedDownloadURL(
 	expiresAt := time.Now().Add(expiresIn)
 
 	input := &s3.GetObjectInput{
-		Bucket: aws.String(r.bucket),
-		Key:    aws.String(key),
+		Bucket:              aws.String(r.bucket),
+		Key:                 aws.String(key),
+		ResponseContentType: aws.String(detectContentType(key)),
 	}
 
 	presignedReq, err := r.presignClient.PresignGetObject(ctx, input, func(opts *s3.PresignOptions) {
